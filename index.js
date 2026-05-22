@@ -42,7 +42,7 @@ client.once("ready", () => {
 });
 
 //////////////////////////////////////////////////////
-// FUNCTIONS
+// CLEAN TEXT
 //////////////////////////////////////////////////////
 
 function cleanText(text) {
@@ -54,44 +54,33 @@ function cleanText(text) {
 }
 
 //////////////////////////////////////////////////////
-// ตรวจจำนวนเงิน
+// EXTRACT AMOUNT
 //////////////////////////////////////////////////////
 
 function extractAmount(text) {
-  const lines = text.split("\n");
+  // หาเฉพาะบรรทัดที่มีคำว่า จำนวน
+  const amountLine = text.match(
+    /จำนวน[\s:]*([\d,]+\.\d{2})/i
+  );
 
-  for (let line of lines) {
-    line = cleanText(line);
-
-    // หาเฉพาะบรรทัดจำนวนเงินจริง
-    if (
-      line.includes("จำนวน") ||
-      line.includes("Amount")
-    ) {
-      const match = line.match(
-        /([\d,]+\.\d{2})/
-      );
-
-      if (match) {
-        return match[1];
-      }
-    }
+  if (amountLine) {
+    return amountLine[1];
   }
 
-  // fallback
-  const all = text.match(
+  // fallback หาเลขบาทตัวสุดท้าย
+  const allNumbers = text.match(
     /([\d,]+\.\d{2})/g
   );
 
-  if (all && all.length > 0) {
-    return all[all.length - 1];
+  if (allNumbers && allNumbers.length > 0) {
+    return allNumbers[allNumbers.length - 1];
   }
 
   return "ไม่พบ";
 }
 
 //////////////////////////////////////////////////////
-// ตรวจธนาคาร
+// EXTRACT BANK
 //////////////////////////////////////////////////////
 
 function extractBank(text) {
@@ -120,8 +109,8 @@ function extractBank(text) {
   }
 
   if (
-    text.includes("กรุงเทพ") ||
-    text.includes("bangkok bank")
+    text.includes("bangkok") ||
+    text.includes("กรุงเทพ")
   ) {
     return "กรุงเทพ";
   }
@@ -138,39 +127,24 @@ function extractBank(text) {
 }
 
 //////////////////////////////////////////////////////
-// ตรวจชื่อ
+// EXTRACT NAME
 //////////////////////////////////////////////////////
 
 function extractName(text) {
-  const lines = text.split("\n");
+  const regex =
+    /(นาย|นางสาว|นาง|น\.ส\.?)\s*[ก-๙a-zA-Z]+/;
 
-  for (let line of lines) {
-    line = cleanText(line);
+  const match = text.match(regex);
 
-    if (
-      line.startsWith("นาย") ||
-      line.startsWith("นาง") ||
-      line.startsWith("น.ส") ||
-      line.startsWith("นางสาว")
-    ) {
-      const words = line
-        .split(" ")
-        .filter(Boolean);
-
-      // เอาแค่ 2 คำ
-      if (words.length >= 2) {
-        return words
-          .slice(0, 2)
-          .join(" ");
-      }
-    }
+  if (match) {
+    return cleanText(match[0]);
   }
 
   return "ไม่พบ";
 }
 
 //////////////////////////////////////////////////////
-// เช็คว่าเป็นสลิปไหม
+// CHECK SLIP
 //////////////////////////////////////////////////////
 
 function isSlip(text) {
@@ -183,10 +157,10 @@ function isSlip(text) {
     "kplus",
     "krungthai",
     "scb",
-    "ธนาคาร",
-    "บาท",
     "promptpay",
     "พร้อมเพย์",
+    "จำนวน",
+    "บาท",
   ];
 
   let score = 0;
@@ -262,7 +236,9 @@ client.on(
       console.log(
         "========== OCR =========="
       );
+
       console.log(text);
+
       console.log(
         "========================="
       );
@@ -272,10 +248,7 @@ client.on(
       //////////////////////////////////////////////////////
 
       if (!isSlip(text)) {
-        console.log(
-          "❌ ไม่ใช่สลิป"
-        );
-
+        console.log("❌ ไม่ใช่สลิป");
         return;
       }
 
@@ -284,13 +257,13 @@ client.on(
       //////////////////////////////////////////////////////
 
       const amount =
-        extractAmount(rawText);
+        extractAmount(text);
+
+      const sender =
+        extractName(text);
 
       const bank =
         extractBank(text);
-
-      const sender =
-        extractName(rawText);
 
       //////////////////////////////////////////////////////
       // REPLY
