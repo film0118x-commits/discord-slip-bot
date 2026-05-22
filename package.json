@@ -1,0 +1,21 @@
+{
+  "name": "discord-slip-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.16.1",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2",
+    "jimp": "^1.6.1",
+    "qrcode-reader": "^1.0.4",
+    "tesseract.js": "^7.0.0"
+  }
+}
