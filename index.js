@@ -53,18 +53,24 @@ function cleanText(text) {
     .trim();
 }
 
+//////////////////////////////////////////////////////
+// ตรวจจำนวนเงิน
+//////////////////////////////////////////////////////
+
 function extractAmount(text) {
   const lines = text.split("\n");
 
   for (let line of lines) {
     line = cleanText(line);
 
+    // หาเฉพาะบรรทัดจำนวนเงินจริง
     if (
       line.includes("จำนวน") ||
-      line.includes("Amount") ||
-      line.includes("บาท")
+      line.includes("Amount")
     ) {
-      const match = line.match(/([\d,]+\.\d{2})/);
+      const match = line.match(
+        /([\d,]+\.\d{2})/
+      );
 
       if (match) {
         return match[1];
@@ -72,8 +78,21 @@ function extractAmount(text) {
     }
   }
 
+  // fallback
+  const all = text.match(
+    /([\d,]+\.\d{2})/g
+  );
+
+  if (all && all.length > 0) {
+    return all[all.length - 1];
+  }
+
   return "ไม่พบ";
 }
+
+//////////////////////////////////////////////////////
+// ตรวจธนาคาร
+//////////////////////////////////////////////////////
 
 function extractBank(text) {
   text = text.toLowerCase();
@@ -118,6 +137,10 @@ function extractBank(text) {
   return "ไม่พบ";
 }
 
+//////////////////////////////////////////////////////
+// ตรวจชื่อ
+//////////////////////////////////////////////////////
+
 function extractName(text) {
   const lines = text.split("\n");
 
@@ -127,19 +150,28 @@ function extractName(text) {
     if (
       line.startsWith("นาย") ||
       line.startsWith("นาง") ||
-      line.startsWith("น.ส.") ||
+      line.startsWith("น.ส") ||
       line.startsWith("นางสาว")
     ) {
-      const words = line.split(" ").filter(Boolean);
+      const words = line
+        .split(" ")
+        .filter(Boolean);
 
+      // เอาแค่ 2 คำ
       if (words.length >= 2) {
-        return `${words[0]} ${words[1]}`;
+        return words
+          .slice(0, 2)
+          .join(" ");
       }
     }
   }
 
   return "ไม่พบ";
 }
+
+//////////////////////////////////////////////////////
+// เช็คว่าเป็นสลิปไหม
+//////////////////////////////////////////////////////
 
 function isSlip(text) {
   text = text.toLowerCase();
@@ -172,94 +204,121 @@ function isSlip(text) {
 // MESSAGE EVENT
 //////////////////////////////////////////////////////
 
-client.on("messageCreate", async (message) => {
-  try {
-    if (message.author.bot) return;
+client.on(
+  "messageCreate",
+  async (message) => {
+    try {
+      if (message.author.bot) return;
 
-    if (message.attachments.size === 0) return;
+      if (
+        message.attachments.size === 0
+      )
+        return;
 
-    const attachment = message.attachments.first();
+      const attachment =
+        message.attachments.first();
 
-    if (!attachment.contentType) return;
+      if (!attachment.contentType)
+        return;
 
-    if (
-      !attachment.contentType.startsWith("image/")
-    ) {
-      return;
-    }
-
-    console.log("📥 พบรูปภาพ");
-
-    //////////////////////////////////////////////////////
-    // DOWNLOAD IMAGE
-    //////////////////////////////////////////////////////
-
-    const response = await axios({
-      url: attachment.url,
-      responseType: "arraybuffer",
-    });
-
-    //////////////////////////////////////////////////////
-    // OCR
-    //////////////////////////////////////////////////////
-
-    const result = await Tesseract.recognize(
-      response.data,
-      "tha+eng",
-      {
-        logger: () => {},
+      if (
+        !attachment.contentType.startsWith(
+          "image/"
+        )
+      ) {
+        return;
       }
-    );
 
-    const rawText = result.data.text;
+      console.log("📥 พบรูปภาพ");
 
-    const text = cleanText(rawText);
+      //////////////////////////////////////////////////////
+      // DOWNLOAD IMAGE
+      //////////////////////////////////////////////////////
 
-    console.log("========== OCR ==========");
-    console.log(text);
-    console.log("=========================");
+      const response = await axios({
+        url: attachment.url,
+        responseType: "arraybuffer",
+      });
 
-    //////////////////////////////////////////////////////
-    // CHECK SLIP
-    //////////////////////////////////////////////////////
+      //////////////////////////////////////////////////////
+      // OCR
+      //////////////////////////////////////////////////////
 
-    if (!isSlip(text)) {
-      console.log("❌ ไม่ใช่สลิป");
+      const result =
+        await Tesseract.recognize(
+          response.data,
+          "tha+eng",
+          {
+            logger: () => {},
+          }
+        );
 
-      return;
-    }
+      const rawText =
+        result.data.text;
 
-    //////////////////////////////////////////////////////
-    // EXTRACT DATA
-    //////////////////////////////////////////////////////
+      const text =
+        cleanText(rawText);
 
-    const amount = extractAmount(rawText);
+      console.log(
+        "========== OCR =========="
+      );
+      console.log(text);
+      console.log(
+        "========================="
+      );
 
-    const bank = extractBank(text);
+      //////////////////////////////////////////////////////
+      // CHECK SLIP
+      //////////////////////////////////////////////////////
 
-    const sender = extractName(rawText);
+      if (!isSlip(text)) {
+        console.log(
+          "❌ ไม่ใช่สลิป"
+        );
 
-    //////////////////////////////////////////////////////
-    // REPLY
-    //////////////////////////////////////////////////////
+        return;
+      }
 
-    await message.reply(`
+      //////////////////////////////////////////////////////
+      // EXTRACT DATA
+      //////////////////////////////////////////////////////
+
+      const amount =
+        extractAmount(rawText);
+
+      const bank =
+        extractBank(text);
+
+      const sender =
+        extractName(rawText);
+
+      //////////////////////////////////////////////////////
+      // REPLY
+      //////////////////////////////////////////////////////
+
+      await message.reply(`
 ✅ ตรวจสอบสลิปสำเร็จ
 
 💵 จำนวน: ${amount} บาท
 👤 ผู้โอน: ${sender}
 🏦 ธนาคาร: ${bank}
-    `);
+      `);
 
-    console.log("✅ อ่านสลิปสำเร็จ");
-  } catch (error) {
-    console.log("❌ ERROR:", error);
+      console.log(
+        "✅ อ่านสลิปสำเร็จ"
+      );
+    } catch (error) {
+      console.log(
+        "❌ ERROR:",
+        error
+      );
 
-    await message.reply(
-      "❌ อ่านสลิปไม่สำเร็จ"
-    );
+      await message.reply(
+        "❌ อ่านสลิปไม่สำเร็จ"
+      );
+    }
   }
-});
+);
 
 //////////////////////////////////////////////////////
 // LOGIN
