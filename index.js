@@ -22,7 +22,7 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`✅ Web server running on port ${PORT}`);
+  console.log(`🌐 Web server running on port ${PORT}`);
 });
 
 //////////////////////////////////////////////////////
@@ -47,37 +47,32 @@ client.once("ready", () => {
 
 function cleanText(text) {
   return text
-    .replace(/\|/g, "")
+    .replace(/\r/g, "")
+    .replace(/[|]/g, "")
     .replace(/\s+/g, " ")
-    .replace(/[^\S\r\n]+/g, " ")
     .trim();
 }
 
 function extractAmount(text) {
-  const regex =
-    /([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)/g;
+  const lines = text.split("\n");
 
-  const matches = text.match(regex);
+  for (let line of lines) {
+    line = cleanText(line);
 
-  if (!matches) return "ไม่พบ";
+    if (
+      line.includes("จำนวน") ||
+      line.includes("Amount") ||
+      line.includes("บาท")
+    ) {
+      const match = line.match(/([\d,]+\.\d{2})/);
 
-  let biggest = "0";
-
-  for (const m of matches) {
-    const current = parseFloat(
-      m.replace(/,/g, "")
-    );
-
-    const old = parseFloat(
-      biggest.replace(/,/g, "")
-    );
-
-    if (current > old) {
-      biggest = m;
+      if (match) {
+        return match[1];
+      }
     }
   }
 
-  return biggest;
+  return "ไม่พบ";
 }
 
 function extractBank(text) {
@@ -130,12 +125,16 @@ function extractName(text) {
     line = cleanText(line);
 
     if (
-      line.includes("นาย") ||
-      line.includes("นาง") ||
-      line.includes("น.ส.") ||
-      line.includes("นางสาว")
+      line.startsWith("นาย") ||
+      line.startsWith("นาง") ||
+      line.startsWith("น.ส.") ||
+      line.startsWith("นางสาว")
     ) {
-      return line;
+      const words = line.split(" ").filter(Boolean);
+
+      if (words.length >= 2) {
+        return `${words[0]} ${words[1]}`;
+      }
     }
   }
 
@@ -234,7 +233,7 @@ client.on("messageCreate", async (message) => {
     // EXTRACT DATA
     //////////////////////////////////////////////////////
 
-    const amount = extractAmount(text);
+    const amount = extractAmount(rawText);
 
     const bank = extractBank(text);
 
