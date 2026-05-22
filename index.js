@@ -2,7 +2,12 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const axios = require("axios");
 const Tesseract = require("tesseract.js");
 const express = require("express");
+
 require("dotenv").config();
+
+/* =========================
+   EXPRESS SERVER (Render)
+========================= */
 
 const app = express();
 
@@ -10,17 +15,31 @@ app.get("/", (req, res) => {
   res.send("Bot is running!");
 });
 
-app.listen(3000, () => {
-  console.log("Web server running on port 3000");
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Web server running on port ${PORT}`);
 });
 
+/* =========================
+   DISCORD BOT
+========================= */
+
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 client.once("ready", () => {
-  console.log(`ล็อกอินเป็น ${client.user.tag}`);
+  console.log(`✅ ล็อกอินเป็น ${client.user.tag}`);
 });
+
+/* =========================
+   FUNCTIONS
+========================= */
 
 function cleanText(text) {
   return text
@@ -35,12 +54,26 @@ function extractAmount(text) {
 }
 
 function extractBank(text) {
-  if (text.includes("กรุงไทย")) return "กรุงไทย";
-  if (text.includes("กสิกร")) return "กสิกรไทย";
-  if (text.includes("ไทยพาณิชย์")) return "ไทยพาณิชย์";
-  if (text.includes("กรุงเทพ")) return "กรุงเทพ";
-  if (text.includes("ttb")) return "ttb";
-  if (text.includes("ออมสิน")) return "ออมสิน";
+  const lower = text.toLowerCase();
+
+  if (lower.includes("กรุงไทย") || lower.includes("krungthai"))
+    return "กรุงไทย";
+
+  if (lower.includes("กสิกร") || lower.includes("k plus"))
+    return "กสิกรไทย";
+
+  if (lower.includes("ไทยพาณิชย์") || lower.includes("scb"))
+    return "ไทยพาณิชย์";
+
+  if (lower.includes("กรุงเทพ"))
+    return "กรุงเทพ";
+
+  if (lower.includes("ttb"))
+    return "ttb";
+
+  if (lower.includes("ออมสิน"))
+    return "ออมสิน";
+
   return "ไม่พบ";
 }
 
@@ -67,72 +100,82 @@ function extractName(text) {
   return "ไม่พบ";
 }
 
+/* =========================
+   MESSAGE EVENT
+========================= */
+
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
+  try {
+    // กันบอทตอบตัวเอง
+    if (message.author.bot) return;
 
-  if (message.attachments.size > 0) {
-    try {
-      const attachment = message.attachments.first();
+    // เช็คว่ามีรูปไหม
+    const attachment = message.attachments.first();
 
-      if (
-        !attachment.contentType ||
-        !attachment.contentType.startsWith("image/")
-      ) {
-        return;
-      }
+    // ถ้าไม่มีรูป = ไม่ทำอะไร
+    if (!attachment) return;
 
-      const imageUrl = attachment.url;
+    // เช็คว่าเป็นรูปจริงไหม
+    if (
+      !attachment.contentType ||
+      !attachment.contentType.startsWith("image/")
+    ) {
+      return;
+    }
 
-      const response = await axios({
-        url: imageUrl,
-        responseType: "arraybuffer",
-      });
+    console.log("📷 มีการส่งรูป");
 
-      const result = await Tesseract.recognize(response.data, "tha+eng");
+    // โหลดรูป
+    const response = await axios({
+      url: attachment.url,
+      responseType: "arraybuffer",
+    });
 
-      const text = result.data.text;
-      const cleaned = cleanText(text);
+    // OCR อ่านข้อความ
+    const result = await Tesseract.recognize(
+      response.data,
+      "tha+eng"
+    );
 
-      if (
-        !cleaned.includes("โอนเงินสำเร็จ") &&
-        !cleaned.includes("สำเร็จ") &&
-        !cleaned.includes("Krungthai") &&
-        !cleaned.includes("K PLUS") &&
-        !cleaned.includes("SCB")
-      ) {
-        return;
-      }
+    const text = result.data.text;
+    const cleaned = cleanText(text);
 
-      const amount = extractAmount(cleaned);
-      const sender = extractName(text);
-      const bank = extractBank(cleaned);
+    console.log(cleaned);
 
-      await message.reply(`
+    // เช็คว่าเป็นสลิปจริงไหม
+    if (
+      !cleaned.includes("โอนเงินสำเร็จ") &&
+      !cleaned.includes("สำเร็จ") &&
+      !cleaned.includes("Krungthai") &&
+      !cleaned.includes("K PLUS") &&
+      !cleaned.includes("SCB")
+    ) {
+      console.log("❌ ไม่ใช่สลิป");
+      return;
+    }
+
+    const amount = extractAmount(cleaned);
+    const sender = extractName(text);
+    const bank = extractBank(cleaned);
+
+    // ตอบกลับ
+    await message.reply(`
 ✅ ตรวจสอบสลิปสำเร็จ
 
 💵 จำนวน: ${amount} บาท
 👤 ผู้โอน: ${sender}
 🏦 ธนาคาร: ${bank}
-      `);
-    } catch (error) {
-      console.log("ERROR:", error);
+    `);
 
-      await message.reply("❌ อ่านสลิปไม่สำเร็จ");
-    }
+  } catch (error) {
+    console.log("ERROR:", error);
+
+    await message.reply("❌ อ่านสลิปไม่สำเร็จ");
   }
 });
 
+/* =========================
+   LOGIN
+========================= */
+
 client.login(process.env.TOKEN);
-
-const express = require("express");
-const app = express();
-
-app.get("/", (req, res) => {
-  res.send("Bot is running!");
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Web server running on port ${PORT}`);
-});
