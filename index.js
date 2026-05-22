@@ -1,34 +1,27 @@
-const {
-  Client,
-  GatewayIntentBits,
-} = require("discord.js");
-
+const { Client, GatewayIntentBits } = require("discord.js");
 const axios = require("axios");
 const Tesseract = require("tesseract.js");
 const express = require("express");
-
 require("dotenv").config();
 
-//////////////////////////////////////////////////////
-// WEB SERVER
-//////////////////////////////////////////////////////
-
+// =========================
+// EXPRESS
+// =========================
 const app = express();
 
 app.get("/", (req, res) => {
   res.send("Bot is running!");
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
 
-//////////////////////////////////////////////////////
-// DISCORD BOT
-//////////////////////////////////////////////////////
-
+// =========================
+// DISCORD CLIENT
+// =========================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -41,260 +34,198 @@ client.once("ready", () => {
   console.log(`✅ ล็อกอินเป็น ${client.user.tag}`);
 });
 
-//////////////////////////////////////////////////////
+// =========================
 // CLEAN TEXT
-//////////////////////////////////////////////////////
-
+// =========================
 function cleanText(text) {
   return text
     .replace(/\r/g, "")
-    .replace(/[|]/g, "")
+    .replace(/\t/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/[|]/g, "")
     .trim();
 }
 
-//////////////////////////////////////////////////////
+// =========================
 // EXTRACT AMOUNT
-//////////////////////////////////////////////////////
-
+// =========================
 function extractAmount(text) {
-  // หาเฉพาะบรรทัดที่มีคำว่า จำนวน
-  const amountLine = text.match(
-    /จำนวน[\s:]*([\d,]+\.\d{2})/i
+  const clean = text.replace(/,/g, "");
+
+  // หาเฉพาะหลังคำว่า "จำนวน"
+  const amountSection = clean.match(
+    /จำนวน[^0-9]{0,10}([0-9]+\.[0-9]{2})/
   );
 
-  if (amountLine) {
-    return amountLine[1];
+  if (amountSection) {
+    return amountSection[1];
   }
 
-  // fallback หาเลขบาทตัวสุดท้าย
-  const allNumbers = text.match(
-    /([\d,]+\.\d{2})/g
-  );
+  // fallback หาเลขเงินทั้งหมด
+  const matches = [...clean.matchAll(/([0-9]+\.[0-9]{2})/g)];
 
-  if (allNumbers && allNumbers.length > 0) {
-    return allNumbers[allNumbers.length - 1];
-  }
+  if (!matches.length) return "ไม่พบ";
 
-  return "ไม่พบ";
+  // ตัด 0.00 ออก
+  const filtered = matches
+    .map((m) => parseFloat(m[1]))
+    .filter((n) => n > 0);
+
+  if (!filtered.length) return "ไม่พบ";
+
+  // เอาค่าสูงสุด
+  return Math.max(...filtered).toFixed(2);
 }
 
-//////////////////////////////////////////////////////
+// =========================
 // EXTRACT BANK
-//////////////////////////////////////////////////////
-
+// =========================
 function extractBank(text) {
-  text = text.toLowerCase();
+  const t = text.toLowerCase();
 
-  if (
-    text.includes("k plus") ||
-    text.includes("kplus") ||
-    text.includes("กสิกร")
-  ) {
+  if (t.includes("กสิกร") || t.includes("k plus"))
     return "กสิกรไทย";
-  }
 
-  if (
-    text.includes("krungthai") ||
-    text.includes("กรุงไทย")
-  ) {
+  if (t.includes("กรุงไทย") || t.includes("krungthai"))
     return "กรุงไทย";
-  }
 
-  if (
-    text.includes("scb") ||
-    text.includes("ไทยพาณิชย์")
-  ) {
+  if (t.includes("ไทยพาณิชย์") || t.includes("scb"))
     return "ไทยพาณิชย์";
-  }
 
-  if (
-    text.includes("bangkok") ||
-    text.includes("กรุงเทพ")
-  ) {
+  if (t.includes("กรุงเทพ") || t.includes("bangkok bank"))
     return "กรุงเทพ";
-  }
 
-  if (text.includes("ttb")) {
+  if (t.includes("ttb"))
     return "ttb";
-  }
 
-  if (text.includes("ออมสิน")) {
+  if (t.includes("ออมสิน"))
     return "ออมสิน";
-  }
 
   return "ไม่พบ";
 }
 
-//////////////////////////////////////////////////////
+// =========================
 // EXTRACT NAME
-//////////////////////////////////////////////////////
-
+// =========================
 function extractName(text) {
-  const regex =
-    /(นาย|นางสาว|นาง|น\.ส\.?)\s*[ก-๙a-zA-Z]+/;
+  const lines = text.split("\n");
 
-  const match = text.match(regex);
+  for (let line of lines) {
+    line = cleanText(line);
 
-  if (match) {
-    return cleanText(match[0]);
+    const match = line.match(
+      /(นาย|นางสาว|นาง|น\.ส\.?)\s*([ก-๙a-zA-Z]+)/
+    );
+
+    if (match) {
+      return `${match[1]} ${match[2]}`;
+    }
   }
 
   return "ไม่พบ";
 }
 
-//////////////////////////////////////////////////////
+// =========================
 // CHECK SLIP
-//////////////////////////////////////////////////////
-
+// =========================
 function isSlip(text) {
-  text = text.toLowerCase();
-
   const keywords = [
     "โอนเงินสำเร็จ",
-    "สำเร็จ",
+    "จำนวน",
+    "ธนาคาร",
     "k plus",
-    "kplus",
     "krungthai",
     "scb",
     "promptpay",
     "พร้อมเพย์",
-    "จำนวน",
-    "บาท",
+    "pay",
   ];
 
-  let score = 0;
+  const lower = text.toLowerCase();
 
-  for (const word of keywords) {
-    if (text.includes(word)) {
-      score++;
-    }
-  }
-
-  return score >= 2;
+  return keywords.some((k) => lower.includes(k));
 }
 
-//////////////////////////////////////////////////////
+// =========================
 // MESSAGE EVENT
-//////////////////////////////////////////////////////
+// =========================
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
 
-client.on(
-  "messageCreate",
-  async (message) => {
-    try {
-      if (message.author.bot) return;
+  if (message.attachments.size <= 0) return;
 
-      if (
-        message.attachments.size === 0
-      )
-        return;
+  try {
+    const attachment = message.attachments.first();
 
-      const attachment =
-        message.attachments.first();
+    if (
+      !attachment.contentType ||
+      !attachment.contentType.startsWith("image/")
+    ) {
+      return;
+    }
 
-      if (!attachment.contentType)
-        return;
+    // =========================
+    // DOWNLOAD IMAGE
+    // =========================
+    const response = await axios({
+      url: attachment.url,
+      responseType: "arraybuffer",
+    });
 
-      if (
-        !attachment.contentType.startsWith(
-          "image/"
-        )
-      ) {
-        return;
+    // =========================
+    // OCR
+    // =========================
+    const result = await Tesseract.recognize(
+      response.data,
+      "tha+eng",
+      {
+        logger: () => {},
       }
+    );
 
-      console.log("📥 พบรูปภาพ");
+    const rawText = result.data.text;
+    const cleaned = cleanText(rawText);
 
-      //////////////////////////////////////////////////////
-      // DOWNLOAD IMAGE
-      //////////////////////////////////////////////////////
+    console.log("========== OCR ==========");
+    console.log(cleaned);
+    console.log("=========================");
 
-      const response = await axios({
-        url: attachment.url,
-        responseType: "arraybuffer",
-      });
+    // =========================
+    // CHECK VALID SLIP
+    // =========================
+    if (!isSlip(cleaned)) {
+      console.log("❌ ไม่ใช่สลิป");
+      return;
+    }
 
-      //////////////////////////////////////////////////////
-      // OCR
-      //////////////////////////////////////////////////////
+    // =========================
+    // EXTRACT DATA
+    // =========================
+    const amount = extractAmount(cleaned);
+    const sender = extractName(rawText);
+    const bank = extractBank(cleaned);
 
-      const result =
-        await Tesseract.recognize(
-          response.data,
-          "tha+eng",
-          {
-            logger: () => {},
-          }
-        );
-
-      const rawText =
-        result.data.text;
-
-      const text =
-        cleanText(rawText);
-
-      console.log(
-        "========== OCR =========="
-      );
-
-      console.log(text);
-
-      console.log(
-        "========================="
-      );
-
-      //////////////////////////////////////////////////////
-      // CHECK SLIP
-      //////////////////////////////////////////////////////
-
-      if (!isSlip(text)) {
-        console.log("❌ ไม่ใช่สลิป");
-        return;
-      }
-
-      //////////////////////////////////////////////////////
-      // EXTRACT DATA
-      //////////////////////////////////////////////////////
-
-      const amount =
-        extractAmount(text);
-
-      const sender =
-        extractName(text);
-
-      const bank =
-        extractBank(text);
-
-      //////////////////////////////////////////////////////
-      // REPLY
-      //////////////////////////////////////////////////////
-
-      await message.reply(`
+    // =========================
+    // SEND RESULT
+    // =========================
+    await message.reply(`
 ✅ ตรวจสอบสลิปสำเร็จ
 
 💵 จำนวน: ${amount} บาท
 👤 ผู้โอน: ${sender}
 🏦 ธนาคาร: ${bank}
-      `);
+`);
 
-      console.log(
-        "✅ อ่านสลิปสำเร็จ"
-      );
-    } catch (error) {
-      console.log(
-        "❌ ERROR:",
-        error
-      );
+    console.log("✅ อ่านสลิปสำเร็จ");
 
-      await message.reply(
-        "❌ อ่านสลิปไม่สำเร็จ"
-      );
-    }
+  } catch (error) {
+    console.log("❌ ERROR:", error);
+
+    await message.reply("❌ อ่านสลิปไม่สำเร็จ");
   }
-);
+});
 
-//////////////////////////////////////////////////////
+// =========================
 // LOGIN
-//////////////////////////////////////////////////////
-
+// =========================
 client.login(process.env.TOKEN);
