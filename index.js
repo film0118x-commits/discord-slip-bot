@@ -83,46 +83,106 @@ function extractAmount(text) {
 function extractBank(text) {
   const t = text.toLowerCase();
 
-  if (t.includes("กสิกร") || t.includes("k plus"))
+  if (
+    t.includes("กสิกร") ||
+    t.includes("k plus") ||
+    t.includes("kasikorn")
+  ) {
     return "กสิกรไทย";
+  }
 
-  if (t.includes("กรุงไทย") || t.includes("krungthai"))
+  if (
+    t.includes("กรุงไทย") ||
+    t.includes("krungthai")
+  ) {
     return "กรุงไทย";
+  }
 
-  if (t.includes("ไทยพาณิชย์") || t.includes("scb"))
+  if (
+    t.includes("ไทยพาณิชย์") ||
+    t.includes("scb")
+  ) {
     return "ไทยพาณิชย์";
+  }
 
-  if (t.includes("กรุงเทพ") || t.includes("bangkok bank"))
+  if (
+    t.includes("กรุงเทพ") ||
+    t.includes("bangkok bank")
+  ) {
     return "กรุงเทพ";
+  }
 
-  if (t.includes("ttb"))
+  if (t.includes("ttb")) {
     return "ttb";
+  }
 
-  if (t.includes("ออมสิน"))
+  if (t.includes("ออมสิน")) {
     return "ออมสิน";
+  }
 
   return "ไม่พบ";
 }
 
 // =========================
-// CHECK SLIP
+// CHECK REAL SLIP
 // =========================
 function isSlip(text) {
-  const keywords = [
-    "โอนเงินสำเร็จ",
-    "จำนวน",
-    "ธนาคาร",
-    "k plus",
-    "krungthai",
-    "scb",
-    "promptpay",
-    "พร้อมเพย์",
-    "pay",
-  ];
+  const t = text.toLowerCase();
 
-  const lower = text.toLowerCase();
+  let score = 0;
 
-  return keywords.some((k) => lower.includes(k));
+  // คำเกี่ยวกับสลิป
+  if (
+    t.includes("โอนเงินสำเร็จ") ||
+    t.includes("ทำรายการสำเร็จ") ||
+    t.includes("transfer successful")
+  ) {
+    score++;
+  }
+
+  // มีจำนวนเงิน
+  if (/([0-9]+\.[0-9]{2})/.test(t)) {
+    score++;
+  }
+
+  // มีธนาคาร
+  if (
+    t.includes("กสิกร") ||
+    t.includes("k plus") ||
+    t.includes("krungthai") ||
+    t.includes("ไทยพาณิชย์") ||
+    t.includes("scb") ||
+    t.includes("กรุงเทพ") ||
+    t.includes("ttb") ||
+    t.includes("ออมสิน")
+  ) {
+    score++;
+  }
+
+  // มี promptpay / qr
+  if (
+    t.includes("promptpay") ||
+    t.includes("พร้อมเพย์") ||
+    t.includes("qr")
+  ) {
+    score++;
+  }
+
+  // มีคำว่า จำนวน
+  if (t.includes("จำนวน")) {
+    score++;
+  }
+
+  // มีเลขรายการ
+  if (
+    t.includes("เลขที่รายการ") ||
+    t.includes("transaction")
+  ) {
+    score++;
+  }
+
+  // ต้องได้อย่างน้อย 3 แต้ม
+  return score >= 3;
 }
 
 // =========================
@@ -142,6 +202,8 @@ client.on("messageCreate", async (message) => {
     ) {
       return;
     }
+
+    console.log("🖼️ พบรูปภาพ");
 
     // =========================
     // DOWNLOAD IMAGE
@@ -182,6 +244,15 @@ client.on("messageCreate", async (message) => {
     // =========================
     const amount = extractAmount(cleaned);
     const bank = extractBank(cleaned);
+
+    // ถ้าอ่านไม่ได้จริง ไม่ตอบ
+    if (
+      amount === "ไม่พบ" &&
+      bank === "ไม่พบ"
+    ) {
+      console.log("❌ อ่านข้อมูลไม่ได้");
+      return;
+    }
 
     // =========================
     // SEND RESULT
