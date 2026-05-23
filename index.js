@@ -52,9 +52,9 @@ function cleanText(text) {
 function extractAmount(text) {
   const clean = text.replace(/,/g, "");
 
-  // หาเฉพาะหลังคำว่า "จำนวน"
+  // หาเฉพาะหลังคำว่า จำนวน
   const amountSection = clean.match(
-    /จำนวน[^0-9]{0,10}([0-9]+\.[0-9]{2})/
+    /จำนวน[^0-9]{0,15}([0-9]+\.[0-9]{2})/
   );
 
   if (amountSection) {
@@ -100,27 +100,6 @@ function extractBank(text) {
 
   if (t.includes("ออมสิน"))
     return "ออมสิน";
-
-  return "ไม่พบ";
-}
-
-// =========================
-// EXTRACT NAME
-// =========================
-function extractName(text) {
-  const lines = text.split("\n");
-
-  for (let line of lines) {
-    line = cleanText(line);
-
-    const match = line.match(
-      /(นาย|นางสาว|นาง|น\.ส\.?)\s*([ก-๙a-zA-Z]+)/
-    );
-
-    if (match) {
-      return `${match[1]} ${match[2]}`;
-    }
-  }
 
   return "ไม่พบ";
 }
@@ -202,18 +181,18 @@ client.on("messageCreate", async (message) => {
     // EXTRACT DATA
     // =========================
     const amount = extractAmount(cleaned);
-    const sender = extractName(rawText);
     const bank = extractBank(cleaned);
 
     // =========================
     // SEND RESULT
     // =========================
     await message.reply(`
-✅ ตรวจสอบสลิปสำเร็จ
+✅ ตรวจสอบสลิปสำเร็จ ✅
 
-💵 จำนวน: ${amount} บาท
-👤 ผู้โอน: ${sender}
-🏦 ธนาคาร: ${bank}
+💵・จำนวน: ${amount} บาท
+🏦・ธนาคาร: ${bank}
+
+⚖️ โปรดรอ ADMIN ตอบกลับสักครู่ ⚖️
 `);
 
     console.log("✅ อ่านสลิปสำเร็จ");
